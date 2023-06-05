@@ -1,6 +1,6 @@
 go 1.19
 
-module github.com/cosmos/ibc-go/v7
+module github.com/SDavidson1177/ibc-go/v7
 
 require (
 	cosmossdk.io/api v0.3.1
