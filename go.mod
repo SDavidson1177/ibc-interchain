@@ -1,6 +1,6 @@
 go 1.19
 
-module github.com/SDavidson1177/ibc-go/v7
+module github.com/SDavidson1177/ibc-go
 
 require (
 	cosmossdk.io/api v0.3.1
@@ -168,4 +168,3 @@ require (
 )
 
 replace github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
-replace github.com/cosmos/ibc-go => github.com/SDavidson1177/ibc-go
