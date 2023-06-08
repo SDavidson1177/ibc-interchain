@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"bytes"
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -15,6 +16,42 @@ import (
 	host "github.com/cosmos/ibc-go/v6/modules/core/24-host"
 	"github.com/cosmos/ibc-go/v6/modules/core/exported"
 )
+
+// SendPacketMultiHop is called by a module in order to send an IBC packet on a channel.
+// This allows packets to travers multiple hops.
+// The packet sequence generated for the packet to be sent is returned. An error
+// is returned if one occurs.
+func (k Keeper) SendPacketMultiHop(
+	ctx sdk.Context,
+	channelCap *capabilitytypes.Capability,
+	sourcePort string,
+	sourceChannel string,
+	timeoutHeight clienttypes.Height,
+	timeoutTimestamp uint64,
+	data []byte,
+	hops []types.MultiHopHeader,
+) (uint64, error) {
+	// Convert header to bytes
+	header_bytes := []byte{}
+	len_hops := len(hops)
+
+	for i := len_hops - 1; i >= 0; i-- {
+		temp, err := json.Marshal(hops[i])
+		if err != nil {
+			return 0, sdkerrors.Wrapf(
+				types.ErrInvalidPacket,
+				"Cannot marshall multihop header data",
+			)
+		}
+
+		header_bytes = append(temp, data...)
+	}
+
+	// Append header data to packet
+	data = append(header_bytes, data...)
+
+	return k.SendPacket(ctx, channelCap, sourcePort, sourceChannel, timeoutHeight, timeoutTimestamp, data)
+}
 
 // SendPacket is called by a module in order to send an IBC packet on a channel.
 // The packet sequence generated for the packet to be sent is returned. An error
@@ -123,6 +160,132 @@ func (k Keeper) SendPacket(
 	)
 
 	return packet.GetSequence(), nil
+}
+
+// RecvPacket is called by a module in order to receive & process an IBC packet
+// Can parse and receive multi hop packets
+// sent on the corresponding channel end on the counterparty chain.
+func (k Keeper) RecvPacketMultiHop(
+	ctx sdk.Context,
+	chanCap *capabilitytypes.Capability,
+	packet exported.PacketI,
+	proof []byte,
+	proofHeight exported.Height,
+) error {
+	// Get packet data
+	packet_data_bytes := packet.GetData()
+	var packet_data types.MultiHopData
+
+	err := json.Unmarshal(packet_data_bytes, &packet_data)
+	if err != nil {
+		return sdkerrors.Wrapf(
+			types.ErrInvalidPacket,
+			"Cannot unmarshall multihop header data",
+		)
+	}
+
+	// print header data
+	k.Logger(ctx).Info("Received following header data:")
+	for _, val := range packet_data.Header {
+		k.Logger(ctx).Info("Header:", "src port", val.SourcePort, "src channel", val.SourceChannel,
+			"dst port", val.DestinationPort, "dst channel", val.DestinationChannel)
+	}
+
+	// Verify committed packet
+	channel, found := k.GetChannel(ctx, packet.GetDestPort(), packet.GetDestChannel())
+	if !found {
+		return sdkerrors.Wrap(types.ErrChannelNotFound, packet.GetDestChannel())
+	}
+	connectionEnd, _ := k.connectionKeeper.GetConnection(ctx, channel.ConnectionHops[0])
+	commitment := types.CommitPacket(k.cdc, packet)
+	if err := k.connectionKeeper.VerifyPacketCommitment(
+		ctx, connectionEnd, proofHeight, proof,
+		packet.GetSourcePort(), packet.GetSourceChannel(), packet.GetSequence(),
+		commitment,
+	); err != nil {
+		return sdkerrors.Wrap(err, "couldn't verify counterparty packet commitment")
+	}
+
+	h := packet.GetTimeoutHeight().(clienttypes.Height)
+
+	// Reconstruct packet
+	packet_new := types.NewPacket(packet_data.Data, packet.GetSequence(), packet.GetSourcePort(), packet.GetSourceChannel(),
+		packet.GetDestPort(), packet.GetDestChannel(), h, packet.GetTimeoutTimestamp())
+
+	if err := packet_new.ValidateBasic(); err != nil {
+		return sdkerrors.Wrap(err, "constructed packet failed basic validation")
+	}
+
+	// TODO: This is duplicate code. Use for now for convenience.
+	// TODO: Remainder of the checks
+
+	switch channel.Ordering {
+	case types.UNORDERED:
+		// check if the packet receipt has been received already for unordered channels
+		_, found := k.GetPacketReceipt(ctx, packet_new.GetDestPort(), packet_new.GetDestChannel(), packet_new.GetSequence())
+		if found {
+			EmitRecvPacketEvent(ctx, packet_new, channel)
+			// This error indicates that the packet has already been relayed. Core IBC will
+			// treat this error as a no-op in order to prevent an entire relay transaction
+			// from failing and consuming unnecessary fees.
+			return types.ErrNoOpMsg
+		}
+
+		// All verification complete, update state
+		// For unordered channels we must set the receipt so it can be verified on the other side.
+		// This receipt does not contain any data, since the packet has not yet been processed,
+		// it's just a single store key set to an empty string to indicate that the packet has been received
+		k.SetPacketReceipt(ctx, packet_new.GetDestPort(), packet_new.GetDestChannel(), packet_new.GetSequence())
+
+	case types.ORDERED:
+		// check if the packet is being received in order
+		nextSequenceRecv, found := k.GetNextSequenceRecv(ctx, packet_new.GetDestPort(), packet_new.GetDestChannel())
+		if !found {
+			return sdkerrors.Wrapf(
+				types.ErrSequenceReceiveNotFound,
+				"destination port: %s, destination channel: %s", packet_new.GetDestPort(), packet_new.GetDestChannel(),
+			)
+		}
+
+		if packet_new.GetSequence() < nextSequenceRecv {
+			EmitRecvPacketEvent(ctx, packet_new, channel)
+			// This error indicates that the packet has already been relayed. Core IBC will
+			// treat this error as a no-op in order to prevent an entire relay transaction
+			// from failing and consuming unnecessary fees.
+			return types.ErrNoOpMsg
+		}
+
+		if packet_new.GetSequence() != nextSequenceRecv {
+			return sdkerrors.Wrapf(
+				types.ErrPacketSequenceOutOfOrder,
+				"packet sequence ≠ next receive sequence (%d ≠ %d)", packet_new.GetSequence(), nextSequenceRecv,
+			)
+		}
+
+		// All verification complete, update state
+		// In ordered case, we must increment nextSequenceRecv
+		nextSequenceRecv++
+
+		// incrementing nextSequenceRecv and storing under this chain's channelEnd identifiers
+		// Since this is the receiving chain, our channelEnd is packet's destination port and channel
+		k.SetNextSequenceRecv(ctx, packet_new.GetDestPort(), packet_new.GetDestChannel(), nextSequenceRecv)
+
+	}
+
+	// log that a packet has been received & executed
+	k.Logger(ctx).Info(
+		"packet received",
+		"sequence", strconv.FormatUint(packet_new.GetSequence(), 10),
+		"src_port", packet_new.GetSourcePort(),
+		"src_channel", packet_new.GetSourceChannel(),
+		"dst_port", packet_new.GetDestPort(),
+		"dst_channel", packet_new.GetDestChannel(),
+	)
+
+	// emit an event that the relayer can query for
+	EmitRecvPacketEvent(ctx, packet_new, channel)
+
+	return nil
 }
 
 // RecvPacket is called by a module in order to receive & process an IBC packet

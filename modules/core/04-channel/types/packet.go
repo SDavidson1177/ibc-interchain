@@ -12,6 +12,21 @@ import (
 	"github.com/cosmos/ibc-go/v6/modules/core/exported"
 )
 
+// Defines the header information that will be
+// embedded within packets. Used to determine multi
+// hop path
+type MultiHopHeader struct {
+	SourcePort         string
+	SourceChannel      string
+	DestinationPort    string
+	DestinationChannel string
+}
+
+type MultiHopData struct {
+	Header []MultiHopHeader
+	Data   []byte
+}
+
 // CommitPacket returns the packet commitment bytes. The commitment consists of:
 // sha256_hash(timeout_timestamp + timeout_height.RevisionNumber + timeout_height.RevisionHeight + sha256_hash(data))
 // from a given packet. This results in a fixed length preimage.
