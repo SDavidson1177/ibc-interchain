@@ -2,6 +2,7 @@ package types
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -23,8 +24,9 @@ type MultiHopHeader struct {
 }
 
 type MultiHopData struct {
-	Header []MultiHopHeader
-	Data   []byte
+	Channel string
+	Header  []MultiHopHeader
+	Data    []byte
 }
 
 // CommitPacket returns the packet commitment bytes. The commitment consists of:
@@ -94,6 +96,15 @@ func (p Packet) GetDestChannel() string { return p.DestinationChannel }
 
 // GetData implements PacketI interface
 func (p Packet) GetData() []byte { return p.Data }
+
+// GetData implements PacketI interface
+func (p Packet) ExtractData() []byte {
+	// Extract data from multihop header data
+	var mhd MultiHopData
+	json.Unmarshal(p.Data, &mhd)
+	p.Data = mhd.Data
+	return mhd.Data
+}
 
 // GetTimeoutHeight implements PacketI interface
 func (p Packet) GetTimeoutHeight() exported.Height { return p.TimeoutHeight }

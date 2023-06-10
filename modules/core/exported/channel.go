@@ -28,6 +28,7 @@ type PacketI interface {
 	GetDestPort() string
 	GetDestChannel() string
 	GetData() []byte
+	ExtractData() []byte
 	ValidateBasic() error
 }
 
