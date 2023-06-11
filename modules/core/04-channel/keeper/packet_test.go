@@ -79,7 +79,7 @@ func (suite *KeeperTestSuite) TestSendPacketMultiHop() {
 			expectedSequence, ok := suite.chainA.App.GetIBCKeeper().ChannelKeeper.GetNextSequenceSend(suite.chainA.GetContext(), sourcePort, sourceChannel)
 
 			sequence, err := suite.chainA.App.GetIBCKeeper().ChannelKeeper.SendPacketMultiHop(suite.chainA.GetContext(), channelCap,
-				sourcePort, sourceChannel, timeoutHeight, timeoutTimestamp, packetData, multiHopPath)
+				sourcePort, sourceChannel, timeoutHeight, timeoutTimestamp, packetData, 0, multiHopPath)
 
 			if tc.expPass {
 				suite.Require().NoError(err)

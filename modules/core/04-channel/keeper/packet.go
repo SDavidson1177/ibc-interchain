@@ -29,12 +29,13 @@ func (k Keeper) SendPacketMultiHop(
 	timeoutHeight clienttypes.Height,
 	timeoutTimestamp uint64,
 	data []byte,
+	hop_count uint32,
 	hops []types.MultiHopHeader,
 ) (uint64, error) {
 	// Convert header to bytes
 	multi_hop_data := types.MultiHopData{
 		Channel: sourceChannel,
-		Hops:    0,
+		Hops:    hop_count,
 		Header:  hops,
 		Data:    data,
 	}
