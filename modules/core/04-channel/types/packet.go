@@ -25,6 +25,7 @@ type MultiHopHeader struct {
 
 type MultiHopData struct {
 	Channel string
+	Hops    uint32
 	Header  []MultiHopHeader
 	Data    []byte
 }
