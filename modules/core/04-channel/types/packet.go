@@ -98,6 +98,10 @@ func (p Packet) GetDestChannel() string { return p.DestinationChannel }
 // GetData implements PacketI interface
 func (p Packet) GetData() []byte { return p.Data }
 
+func (p Packet) SetData(data []byte) {
+	p.Data = data
+}
+
 // GetData implements PacketI interface
 func (p Packet) ExtractData() []byte {
 	// Extract data from multihop header data
