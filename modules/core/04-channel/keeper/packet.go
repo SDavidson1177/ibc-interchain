@@ -35,7 +35,6 @@ func (k Keeper) SendPacketMultiHop(
 	// Convert header to bytes
 	multi_hop_data := types.MultiHopData{
 		Channel: sourceChannel,
-		Hops:    hop_count,
 		Header:  hops,
 		Data:    data,
 	}
@@ -67,7 +66,6 @@ func (k Keeper) SendPacket(
 	} else {
 		header_data := types.MultiHopData{
 			Channel: "",
-			Hops:    0,
 			Header:  []types.MultiHopHeader{},
 			Data:    data,
 		}

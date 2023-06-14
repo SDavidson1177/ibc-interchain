@@ -68,8 +68,8 @@ func (suite *KeeperTestSuite) TestSendPacketMultiHop() {
 
 			// Mock Path
 			multiHopPath := []types.MultiHopHeader{
-				{SourcePort: "srcport1", SourceChannel: "srcchannel1", DestinationPort: "dstport1", DestinationChannel: "dstchannel1"},
-				{SourcePort: "srcport2", SourceChannel: "srcchannel2", DestinationPort: "dstport2", DestinationChannel: "dstchannel2"},
+				{ChainID: "evmos_9000-4", SourcePort: "srcport1", SourceChannel: "srcchannel1"},
+				{ChainID: "evmos_9000-5", SourcePort: "srcport2", SourceChannel: "srcchannel2"},
 			}
 
 			// malleate may modify send packet arguments above

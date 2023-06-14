@@ -17,15 +17,13 @@ import (
 // embedded within packets. Used to determine multi
 // hop path
 type MultiHopHeader struct {
-	SourcePort         string
-	SourceChannel      string
-	DestinationPort    string
-	DestinationChannel string
+	ChainID       string // ID of the chain that needs to forward the packet
+	SourcePort    string
+	SourceChannel string
 }
 
 type MultiHopData struct {
 	Channel string
-	Hops    uint32
 	Header  []MultiHopHeader
 	Data    []byte
 }
